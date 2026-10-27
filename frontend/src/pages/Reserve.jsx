@@ -1,0 +1,15 @@
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import api from "../api/axios";
+import { useAuth } from "../context/AuthContext";
+import SeatMap from "../components/SeatMap";
+export default function Reserve() {
+  const { user } = useAuth(); const nav = useNavigate(); const [params] = useSearchParams(); const [data, setData] = useState(null); const [category, setCategory] = useState(null); const [selected, setSelected] = useState([]); const [error, setError] = useState("");
+  useEffect(() => { const concertId = params.get("concert"); const request = concertId ? api.get(`/concert/${concertId}`) : api.get("/concert"); request.then(({ data: result }) => { setData(result); return api.get(`/reservations/plan/${result.concert._id}`); }).then(({ data: plan }) => setData((old) => ({ ...old, plan }))).catch(() => setError("Impossible de charger les places.")); }, [params]);
+  if (!data?.plan) return <div className="page-state">{error || "Chargement du plan de salle..."}</div>;
+  const seats = data.plan.places.filter((seat) => !category || seat.categorie?._id === category._id);
+  const total = selected.reduce((sum, id) => sum + (data.plan.places.find((seat) => seat.id === id)?.categorie?.prix || 0), 0);
+  function toggle(seat) { if (seat.statut !== "disponible") return; if (selected.includes(seat.id)) return setSelected(selected.filter((id) => id !== seat.id)); if (selected.length >= 6 || (category && seat.categorie?._id !== category._id)) return; setSelected([...selected, seat.id]); setCategory(seat.categorie); }
+  async function submit() { try { const { data: ticket } = await api.post("/reservations", { categorie: category._id, quantite: selected.length, places: selected }); nav(`/ticket/${ticket._id}`); } catch (err) { setError(err.response?.data?.message || "Réservation impossible."); } }
+  return <section className="reserve-page"><div className="page-intro"><p className="eyebrow">RÉSERVATION · {user.prenom}</p><h2>{data.concert.titre || "Choisissez vos places"}</h2><p className="muted">Sélectionnez jusqu'à 6 places dans la même catégorie.</p></div><div className="reserve-layout"><div><div className="category-tabs">{data.categories.map((cat) => <button disabled={!cat.quantiteRestante} key={cat._id} className={category?._id === cat._id ? "selected-tab" : ""} onClick={() => { setCategory(cat); setSelected([]); }}>{cat.nom}<small>{cat.prix} DT · {cat.quantiteRestante} restantes</small></button>)}</div><SeatMap seats={seats} selected={selected} onToggle={toggle} /></div><aside className="summary-card"><p className="eyebrow">VOTRE SÉLECTION</p><h3>{selected.length} place{selected.length > 1 ? "s" : ""}</h3><p className="muted">{category?.nom || "Choisissez une catégorie"}</p><div className="total-line"><span>Total</span><strong>{total} DT</strong></div><button className="button full-button" disabled={!selected.length} onClick={submit}>Confirmer la réservation</button>{error && <p className="error-text">{error}</p>}</aside></div></section>;
+}
