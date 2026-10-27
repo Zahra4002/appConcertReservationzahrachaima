@@ -1,5 +1,7 @@
 const TicketCategory = require("../models/TicketCategory");
 const Seat = require("../models/Seat");
+const Concert = require("../models/Concert");
+const mongoose = require("mongoose");
 
 const seatPrefix = (nom) => {
   if (nom.toLowerCase() === "vip") return "V";
@@ -54,8 +56,10 @@ exports.create = async (req, res) => {
   try {
     const { concert, nom, prix, quantiteTotale } = req.body;
     const total = Number(quantiteTotale);
-    if (!concert || !nom || !Number.isFinite(Number(prix)) || !Number.isInteger(total) || total < 1)
+    if (!concert || !mongoose.Types.ObjectId.isValid(concert) || !nom || !Number.isFinite(Number(prix)) || !Number.isInteger(total) || total < 1)
       return res.status(400).json({ message: "Concert, nom, prix et une quantité positive sont obligatoires" });
+    if (!await Concert.exists({ _id: concert }))
+      return res.status(404).json({ message: "Concert introuvable" });
     const cat = await TicketCategory.create({
       concert, nom, prix: Number(prix), quantiteTotale: total, quantiteRestante: total,
     });
@@ -77,6 +81,9 @@ exports.update = async (req, res) => {
     if (!cat) return res.status(404).json({ message: "Catégorie introuvable" });
     const { nom, prix, quantiteTotale } = req.body;
     const total = quantiteTotale === undefined ? undefined : Number(quantiteTotale);
+    const price = prix === undefined ? undefined : Number(prix);
+    if (price !== undefined && (!Number.isFinite(price) || price < 0))
+      return res.status(400).json({ message: "Le prix doit être un nombre positif ou nul" });
     if (total !== undefined && (!Number.isInteger(total) || total < 1))
       return res.status(400).json({ message: "La quantité totale doit être un entier positif" });
     const currentSeats = quantiteTotale !== undefined
@@ -84,7 +91,7 @@ exports.update = async (req, res) => {
       : [];
     let removable = [];
     if (nom !== undefined) cat.nom = nom;
-    if (prix !== undefined) cat.prix = prix;
+    if (price !== undefined) cat.prix = price;
     if (quantiteTotale !== undefined) {
       // on garde le nombre de places déjà vendues
       const vendus = cat.quantiteTotale - cat.quantiteRestante;

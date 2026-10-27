@@ -7,7 +7,10 @@ const concertSchema = new mongoose.Schema(
     date: { type: Date, required: true },
     heure: String,
     lieu: { type: String, required: true },
+    artiste: String,
     affiche: String,
+    photos: { type: [String], default: [] },
+    dateLimiteAnnulation: { type: Date, default: null },
     programme: [String],
   },
   { timestamps: true }

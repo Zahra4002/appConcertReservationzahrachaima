@@ -57,7 +57,11 @@ exports.create = async (req, res) => {
 
     try {
       const reservation = await Reservation.create({
-        utilisateur: req.user.id, categorie, quantite: qte, places: selectedSeats,
+        utilisateur: req.user.id,
+        categorie,
+        quantite: qte,
+        places: selectedSeats,
+        statut: "confirmee",
       });
       res.status(201).json(await reservation.populate("places", "code rangee numero"));
     } catch (err) {
@@ -74,13 +78,19 @@ exports.create = async (req, res) => {
 
 exports.mine = async (req, res) => {
   const list = await Reservation.find({ utilisateur: req.user.id })
-    .populate("categorie", "nom prix")
+    .populate({ path: "categorie", select: "nom prix concert", populate: { path: "concert", select: "titre date lieu affiche dateLimiteAnnulation" } })
     .sort({ createdAt: -1 });
   res.json(list);
 };
 
 exports.cancel = async (req, res) => {
   try {
+    const existing = await Reservation.findOne({ _id: req.params.id, utilisateur: req.user.id, statut: "confirmee" })
+      .populate({ path: "categorie", select: "concert", populate: { path: "concert", select: "dateLimiteAnnulation" } });
+    if (!existing) return res.status(404).json({ message: "Réservation introuvable ou déjà annulée" });
+    const deadline = existing.categorie?.concert?.dateLimiteAnnulation;
+    if (deadline && new Date() > new Date(deadline))
+      return res.status(403).json({ message: "La date limite d'annulation est dépassée" });
     const r = await Reservation.findOneAndUpdate(
       { _id: req.params.id, utilisateur: req.user.id, statut: "confirmee" },
       { statut: "annulee" },
