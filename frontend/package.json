@@ -10,10 +10,7 @@
   },
   "dependencies": {
     "axios": "^1.8.4",
-<<<<<<< HEAD
     "lucide-react": "^1.68.0",
-=======
->>>>>>> origin/notification
     "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

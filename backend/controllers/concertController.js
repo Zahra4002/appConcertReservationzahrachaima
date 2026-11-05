@@ -100,14 +100,9 @@ exports.updateConcert = async (req, res) => {
       update.affiche = req.body.affiche || update.photos[0] || "";
     }
     const concert = await Concert.findByIdAndUpdate(req.params.id, update, {
-<<<<<<< HEAD
   returnDocument: "after",
   runValidators: true,
 });
-=======
-      new: true, runValidators: true,
-    });
->>>>>>> origin/notification
     res.json(serializeConcert(concert));
   } catch (err) {
     res.status(400).json({ message: err.message });

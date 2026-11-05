@@ -182,7 +182,6 @@ export default function AdminCategories() {
       <div className="form-row">
         <label className="file-input"><span>Photos du concert</span><span className="file-button">＋ Importer des images</span><input type="file" accept="image/*" multiple onChange={(e) => selectImages(e, "new")} /></label>
         <div className="image-previews">{newConcert.photos.map((photo) => <img className="image-preview" src={photo} alt="Aperçu du concert" key={photo} />)}</div>
-<<<<<<< HEAD
         <label>
   Date limite d'annulation :
   <input
@@ -197,9 +196,6 @@ export default function AdminCategories() {
   />
 </label>
         
-=======
-        <label>Date limite d'annulation><input type="datetime-local" value={newConcert.dateLimiteAnnulation} onChange={(e) => setNewConcert({ ...newConcert, dateLimiteAnnulation: e.target.value })} /></label>
->>>>>>> origin/notification
         <button className="button">Créer le concert</button>
       </div>
       <textarea placeholder="Description" value={newConcert.description} onChange={(e) => setNewConcert({ ...newConcert, description: e.target.value })} />
@@ -223,7 +219,6 @@ export default function AdminCategories() {
       <div className="form-row">
         <label className="file-input"><span>Photos du concert</span><span className="file-button">＋ Importer des images</span><input type="file" accept="image/*" multiple onChange={(e) => selectImages(e, "edit")} /></label>
         <div className="image-previews">{(concert.photos || (concert.affiche ? [concert.affiche] : [])).map((photo) => <div className="image-preview-item" key={photo}><img className="image-preview" src={photo} alt="Aperçu du concert" /><button type="button" className="remove-image-button" aria-label="Supprimer cette image" onClick={() => removeConcertPhoto(photo)}>×</button></div>)}</div>
-<<<<<<< HEAD
         <label>
   Date limite d'annulation :
   <input
@@ -239,9 +234,6 @@ export default function AdminCategories() {
 </label>
         
         
-=======
-        <label>Date limite d'annulation><input type="datetime-local" value={concert.dateLimiteAnnulation} onChange={(e) => setConcert({ ...concert, dateLimiteAnnulation: e.target.value })} /></label>
->>>>>>> origin/notification
         <button className="button">Enregistrer les modifications</button>
       </div>
       <textarea placeholder="Description" value={concert.description} onChange={(e) => setConcert({ ...concert, description: e.target.value })} />
