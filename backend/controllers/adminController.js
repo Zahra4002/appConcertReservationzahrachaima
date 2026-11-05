@@ -5,6 +5,7 @@ const Seat = require("../models/Seat");
 const { ensureSeats } = require("./categoryController");
 const bcrypt = require("bcrypt");
 const mongoose = require("mongoose");
+<<<<<<< HEAD
 const sendAcceptanceEmail = require("../utils/sendEmail");
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const Notification = require("../models/Notification");
@@ -78,6 +79,11 @@ exports.markNotificationRead = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+=======
+
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+>>>>>>> origin/notification
 // Liste des réservations (filtres : statut, categorie, q = nom/email/code)
 exports.listReservations = async (req, res) => {
   try {
@@ -100,6 +106,7 @@ exports.listReservations = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 exports.refuseUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -177,6 +184,8 @@ exports.approveUser = async (req, res) => {
   }
 };
 
+=======
+>>>>>>> origin/notification
 exports.getReservation = async (req, res) => {
   const r = await Reservation.findById(req.params.id)
     .populate("utilisateur", "nom prenom email telephone")
@@ -256,6 +265,7 @@ exports.createUser = async (req, res) => {
   }
 };
 
+<<<<<<< HEAD
 
 exports.updateUser = async (req, res) => {
   try {
@@ -351,6 +361,32 @@ exports.updateUser = async (req, res) => {
 };
 
 
+=======
+exports.updateUser = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id))
+      return res.status(400).json({ message: "Identifiant utilisateur invalide" });
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "Utilisateur introuvable" });
+    const { nom, prenom, email, telephone, motDePasse, role } = req.body;
+    if (!nom || !prenom || !email || !["user", "admin"].includes(role))
+      return res.status(400).json({ message: "Nom, prénom, e-mail et rôle sont obligatoires" });
+    const duplicate = await User.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+    if (duplicate) return res.status(400).json({ message: "Cet e-mail est déjà utilisé" });
+    user.nom = nom; user.prenom = prenom; user.email = email.toLowerCase();
+    user.telephone = telephone; user.role = role;
+    if (motDePasse) {
+      if (motDePasse.length < 6) return res.status(400).json({ message: "Le mot de passe doit contenir au moins 6 caractères" });
+      user.motDePasse = await bcrypt.hash(motDePasse, 10);
+    }
+    await user.save();
+    res.json(await User.findById(user._id).select("-motDePasse"));
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+>>>>>>> origin/notification
 exports.deleteUser = async (req, res) => {
   try {
     if (req.params.id === String(req.user.id))
