@@ -1,0 +1,238 @@
+const Reservation = require("../models/Reservation");
+const TicketCategory = require("../models/TicketCategory");
+const Seat = require("../models/Seat");
+const notifyAdmins = require("../utils/notifyAdmins");
+
+exports.seatPlan = async (req, res) => {
+  try {
+    const seats = await Seat.find({ concert: req.params.concertId })
+      .populate("categorie", "nom prix")
+      .sort({ categorie: 1, rangee: 1, numero: 1 });
+    res.json({
+      scene: "Scène",
+      places: seats.map((seat) => ({
+        id: seat._id,
+        code: seat.code,
+        rangee: seat.rangee,
+        numero: seat.numero,
+        statut: seat.statut,
+        categorie: seat.categorie,
+      })),
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+};
+
+// Réserver : le stock est décrémenté de façon atomique (pas de sur-réservation)
+
+exports.create = async (req, res) => {
+  const { categorie, quantite, places } = req.body;
+
+  // Éviter les places en double
+  const selectedSeats = Array.isArray(places)
+    ? [...new Set(places)]
+    : [];
+
+  const qte = Number(quantite || selectedSeats.length);
+
+  // Vérification des données
+  if (
+    !categorie ||
+    !Number.isInteger(qte) ||
+    qte < 1 ||
+    qte > 6
+  ) {
+    return res.status(400).json({
+      message: "Quantité invalide (entre 1 et 6)",
+    });
+  }
+
+  if (selectedSeats.length !== qte) {
+    return res.status(400).json({
+      message: "Sélectionnez exactement les places réservées",
+    });
+  }
+
+  let seatsReserved = false;
+  let categoryUpdated = false;
+
+  try {
+    // 1. Vérifier que les places existent et correspondent à la catégorie
+    const seats = await Seat.find({
+      _id: { $in: selectedSeats },
+      categorie,
+    });
+
+    if (seats.length !== qte) {
+      return res.status(400).json({
+        message: "Une ou plusieurs places ne correspondent pas à cette catégorie",
+      });
+    }
+
+    // 2. Réserver uniquement les places encore disponibles
+    const claimed = await Seat.updateMany(
+      {
+        _id: { $in: selectedSeats },
+        categorie,
+        statut: "disponible",
+      },
+      {
+        $set: { statut: "occupee" },
+      }
+    );
+
+    if (claimed.modifiedCount !== qte) {
+      // Libérer uniquement les places qui viennent d'être réservées
+      await Seat.updateMany(
+        {
+          _id: { $in: selectedSeats },
+          statut: "occupee",
+        },
+        {
+          $set: { statut: "disponible" },
+        }
+      );
+
+      return res.status(409).json({
+        message: "Une ou plusieurs places viennent d'être réservées",
+      });
+    }
+
+    seatsReserved = true;
+
+    // 3. Diminuer la quantité restante de la catégorie
+    const cat = await TicketCategory.findOneAndUpdate(
+      {
+        _id: categorie,
+        quantiteRestante: { $gte: qte },
+      },
+      {
+        $inc: { quantiteRestante: -qte },
+      },
+      {
+        returnDocument: "after",
+      }
+    );
+
+    if (!cat) {
+      await Seat.updateMany(
+        {
+          _id: { $in: selectedSeats },
+          statut: "occupee",
+        },
+        {
+          $set: { statut: "disponible" },
+        }
+      );
+
+      seatsReserved = false;
+
+      return res.status(400).json({
+        message: "Plus assez de places disponibles",
+      });
+    }
+
+    categoryUpdated = true;
+
+    // 4. Créer la réservation
+    const reservation = await Reservation.create({
+      utilisateur: req.user.id,
+      categorie,
+      quantite: qte,
+      places: selectedSeats,
+      statut: "confirmee",
+    });
+
+    // 5. Récupérer les informations des places
+    const reservationComplete = await Reservation.findById(
+      reservation._id
+    ).populate("places", "code rangee numero");
+
+    // 6. Envoyer la réponse au client
+    res.status(201).json(reservationComplete);
+
+    // 7. Envoyer la notification séparément
+    try {
+      await notifyAdmins(
+        "reservation",
+        "Nouvelle réservation effectuée !",
+        "/admin/reservations"
+      );
+    } catch (notificationError) {
+      console.error(
+        "Erreur notification admin :",
+        notificationError.message
+      );
+    }
+
+  } catch (err) {
+    console.error("Erreur réservation :", err);
+
+    // Annuler les modifications si la réservation n'a pas abouti
+    try {
+      if (categoryUpdated) {
+        await TicketCategory.findByIdAndUpdate(
+          categorie,
+          { $inc: { quantiteRestante: qte } }
+        );
+      }
+
+      if (seatsReserved) {
+        await Seat.updateMany(
+          {
+            _id: { $in: selectedSeats },
+            statut: "occupee",
+          },
+          {
+            $set: { statut: "disponible" },
+          }
+        );
+      }
+    } catch (rollbackError) {
+      console.error("Erreur lors de l'annulation :", rollbackError);
+    }
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: "Erreur lors de la création de la réservation",
+      });
+    }
+  }
+};
+
+exports.mine = async (req, res) => {
+  const list = await Reservation.find({ utilisateur: req.user.id })
+    .populate({ path: "categorie", select: "nom prix concert", populate: { path: "concert", select: "titre date lieu affiche dateLimiteAnnulation" } })
+    .sort({ createdAt: -1 });
+  res.json(list);
+};
+
+exports.cancel = async (req, res) => {
+  try {
+    const existing = await Reservation.findOne({ _id: req.params.id, utilisateur: req.user.id, statut: "confirmee" })
+      .populate({ path: "categorie", select: "concert", populate: { path: "concert", select: "dateLimiteAnnulation" } });
+    if (!existing) return res.status(404).json({ message: "Réservation introuvable ou déjà annulée" });
+    const deadline = existing.categorie?.concert?.dateLimiteAnnulation;
+    if (deadline && new Date() > new Date(deadline))
+      return res.status(403).json({ message: "La date limite d'annulation est dépassée" });
+    const r = await Reservation.findOneAndUpdate(
+  { _id: req.params.id, utilisateur: req.user.id, statut: "confirmee" },
+  { statut: "annulee" },
+  { returnDocument: "after" }
+);
+    await notifyAdmins(
+  "annulation",
+  "Un utilisateur vient d'annuler une réservation.",
+  "/admin/reservations"
+);
+    if (!r) return res.status(404).json({ message: "Réservation introuvable ou déjà annulée" });
+    await TicketCategory.findByIdAndUpdate(r.categorie, { $inc: { quantiteRestante: r.quantite } });
+    if ((r.places || []).length) {
+      await Seat.updateMany({ _id: { $in: r.places } }, { $set: { statut: "disponible" } });
+    }
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
